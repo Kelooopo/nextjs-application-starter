@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SentinelWatch Pro - Security Dashboard</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css" rel="stylesheet">
+    <link href="/static/css/style.css" rel="stylesheet">
+</head>
+<body class="bg-dark text-light">
+    <!-- Navigation -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="#">
+                <i class="fas fa-shield-alt me-2"></i>
+                SentinelWatch Pro
+            </a>
+            <div class="navbar-nav ms-auto">
+                <span class="navbar-text me-3">
+                    Status: <span id="monitoring-status" class="badge bg-success">Protected</span>
+                </span>
+                <button class="btn btn-outline-light btn-sm" id="toggle-monitoring">
+                    <i class="fas fa-power-off"></i>
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid">
+        <div class="row">
+            <!-- Sidebar -->
+            <nav class="col-md-2 col-lg-2 d-md-block bg-secondary sidebar">
+                <div class="position-sticky pt-3">
+                    <ul class="nav flex-column">
+                        <li class="nav-item">
+                            <a class="nav-link active" href="#" data-tab="dashboard">
+                                <i class="fas fa-tachometer-alt me-2"></i>
+                                Dashboard
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="#" data-tab="alerts">
+                                <i class="fas fa-exclamation-triangle me-2"></i>
+                                Alerts
+                                <span id="alert-count" class="badge bg-danger ms-2">0</span>
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="#" data-tab="system">
+                                <i class="fas fa-server me-2"></i>
+                                System Info
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="#" data-tab="network">
+                                <i class="fas fa-network-wired me-2"></i>
+                                Network
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="#" data-tab="files">
+                                <i class="fas fa-file-shield me-2"></i>
+                                File Scanner
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="#" data-tab="logs">
+                                <i class="fas fa-list-alt me-2"></i>
+                                Logs
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="#" data-tab="settings">
+                                <i class="fas fa-cog me-2"></i>
+                                Settings
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+            </nav>
+
+            <!-- Main content -->
+            <main class="col-md-10 ms-sm-auto col-lg-10 px-md-4">
+                <!-- Dashboard Tab -->
+                <div class="tab-content" id="dashboard">
+                    <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+                        <h1 class="h2">Security Dashboard</h1>
+                        <div class="btn-toolbar mb-2 mb-md-0">
+                            <div class="btn-group me-2">
+                                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="updateCharts('1h')">1H</button>
+                                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="updateCharts('24h')">24H</button>
+                                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="updateCharts('7d')">7D</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Status Cards -->
+                    <div class="row mb-4">
+                        <div class="col-xl-3 col-md-6 mb-4">
+                            <div class="card bg-primary text-white">
+                                <div class="card-body">
+                                    <div class="row align-items-center">
+                                        <div class="col">
+                                            <div class="text-xs font-weight-bold text-uppercase mb-1">CPU Usage</div>
+                                            <div class="h5 mb-0" id="cpu-usage">0%</div>
+                                        </div>
+                                        <div class="col-auto">
+                                            <i class="fas fa-microchip fa-2x text-gray-300"></i>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-xl-3 col-md-6 mb-4">
+                            <div class="card bg-success text-white">
+                                <div class="card-body">
+                                    <div class="row align-items-center">
+                                        <div class="col">
+                                            <div class="text-xs font-weight-bold text-uppercase mb-1">Memory Usage</div>
+                                            <div class="h5 mb-0" id="memory-usage">0%</div>
+                                        </div>
+                                        <div class="col-auto">
+                                            <i class="fas fa-memory fa-2x text-gray-300"></i>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-xl-3 col-md-6 mb-4">
+                            <div class="card bg-info text-white">
+                                <div class="card-body">
+                                    <div class="row align-items-center">
+                                        <div class="col">
+                                            <div class="text-xs font-weight-bold text-uppercase mb-1">Disk Usage</div>
+                                            <div class="h5 mb-0" id="disk-usage">0%</div>
+                                        </div>
+                                        <div class="col-auto">
+                                            <i class="fas fa-hdd fa-2x text-gray-300"></i>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-xl-3 col-md-6 mb-4">
+                            <div class="card bg-warning text-white">
+                                <div class="card-body">
+                                    <div class="row align-items-center">
+                                        <div class="col">
+                                            <div class="text-xs font-weight-bold text-uppercase mb-1">Network Connections</div>
+                                            <div class="h5 mb-0" id="network-connections">0</div>
+                                        </div>
+                                        <div class="col-auto">
+                                            <i class="fas fa-network-wired fa-2x text-gray-300"></i>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Charts -->
+                    <div class="row">
+                        <div class="col-lg-6">
+                            <div class="card bg-secondary">
+                                <div class="card-header">
+                                    <h6 class="m-0 font-weight-bold text-primary">System Performance</h6>
+                                </div>
+                                <div class="card-body">
+                                    <canvas id="performance-chart"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-lg-6">
+                            <div class="card bg-secondary">
+                                <div class="card-header">
+                                    <h6 class="m-0 font-weight-bold text-primary">Security Alerts</h6>
+                                </div>
+                                <div class="card-body">
+                                    <canvas id="alerts-chart"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Alerts Tab -->
+                <div class="tab-content d-none" id="alerts">
+                    <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+                        <h1 class="h2">Security Alerts</h1>
+                        <div class="btn-toolbar mb-2 mb-md-0">
+                            <select class="form-select form-select-sm" id="alert-filter">
+                                <option value="all">All Alerts</option>
+                                <option value="high">High Priority</option>
+                                <option value="medium">Medium Priority</option>
+                                <option value="low">Low Priority</option>
+                                <option value="process">Process Alerts</option>
+                                <option value="network">Network Alerts</option>
+                                <option value="file">File Alerts</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div id="alerts-container" class="row">
+                        <!-- Alert cards will be populated here -->
+                    </div>
+                </div>
+
+                <!-- System Info Tab -->
+                <div class="tab-content d-none" id="system">
+                    <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+                        <h1 class="h2">System Information</h1>
+                    </div>
+                    <div class="row">
+                        <div class="col-lg-8">
+                            <div class="card bg-secondary">
+                                <div class="card-header">
+                                    <h6 class="m-0 font-weight-bold text-primary">System Details</h6>
+                                </div>
+                                <div class="card-body">
+                                    <div id="system-info">
+                                        <p><strong>Loading system information...</strong></p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-lg-4">
+                            <div class="card bg-secondary">
+                                <div class="card-header">
+                                    <h6 class="m-0 font-weight-bold text-primary">Quick Actions</h6>
+                                </div>
+                                <div class="card-body">
+                                    <button class="btn btn-primary btn-sm w-100 mb-2" onclick="refreshSystemInfo()">
+                                        <i class="fas fa-sync-alt me-2"></i>Refresh Info
+                                    </button>
+                                    <button class="btn btn-warning btn-sm w-100 mb-2" onclick="scanSystem()">
+                                        <i class="fas fa-search me-2"></i>Quick Scan
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Network Tab -->
+                <div class="tab-content d-none" id="network">
+                    <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+                        <h1 class="h2">Network Monitoring</h1>
+                    </div>
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle me-2"></i>
+                        Network monitoring is active. Suspicious connections and traffic patterns are being analyzed.
+                    </div>
+                </div>
+
+                <!-- File Scanner Tab -->
+                <div class="tab-content d-none" id="files">
+                    <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+                        <h1 class="h2">File Scanner</h1>
+                    </div>
+                    <div class="row">
+                        <div class="col-lg-8">
+                            <div class="card bg-secondary">
+                                <div class="card-header">
+                                    <h6 class="m-0 font-weight-bold text-primary">Scan File</h6>
+                                </div>
+                                <div class="card-body">
+                                    <div class="mb-3">
+                                        <label for="file-path" class="form-label">File Path</label>
+                                        <input type="text" class="form-control" id="file-path" placeholder="Enter file path to scan">
+                                    </div>
+                                    <button class="btn btn-primary" onclick="scanFile()">
+                                        <i class="fas fa-search me-2"></i>Scan File
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-lg-4">
+                            <div class="card bg-secondary">
+                                <div class="card-header">
+                                    <h6 class="m-0 font-weight-bold text-primary">Scan Results</h6>
+                                </div>
+                                <div class="card-body">
+                                    <div id="scan-results">
+                                        <p class="text-muted">No scans performed yet.</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Logs Tab -->
+                <div class="tab-content d-none" id="logs">
+                    <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+                        <h1 class="h2">Security Logs</h1>
+                        <button class="btn btn-outline-secondary btn-sm" onclick="refreshLogs()">
+                            <i class="fas fa-sync-alt me-2"></i>Refresh
+                        </button>
+                    </div>
+                    <div class="card bg-secondary">
+                        <div class="card-body">
+                            <pre id="logs-content" class="bg-dark text-light p-3" style="height: 400px; overflow-y: scroll; font-size: 12px;">
+Loading logs...
+                            </pre>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Settings Tab -->
+                <div class="tab-content d-none" id="settings">
+                    <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+                        <h1 class="h2">Settings</h1>
+                        <button class="btn btn-success btn-sm" onclick="saveSettings()">
+                            <i class="fas fa-save me-2"></i>Save Settings
+                        </button>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-lg-6">
+                            <div class="card bg-secondary mb-3">
+                                <div class="card-header">
+                                    <h6 class="m-0 font-weight-bold text-primary">Monitoring Settings</h6>
+                                </div>
+                                <div class="card-body">
+                                    <div class="form-check mb-3">
+                                        <input class="form-check-input" type="checkbox" id="monitor-processes">
+                                        <label class="form-check-label" for="monitor-processes">
+                                            Monitor Processes
+                                        </label>
+                                    </div>
+                                    <div class="form-check mb-3">
+                                        <input class="form-check-input" type="checkbox" id="monitor-network">
+                                        <label class="form-check-label" for="monitor-network">
+                                            Monitor Network
+                                        </label>
+                                    </div>
+                                    <div class="form-check mb-3">
+                                        <input class="form-check-input" type="checkbox" id="monitor-files">
+                                        <label class="form-check-label" for="monitor-files">
+                                            Monitor Files
+                                        </label>
+                                    </div>
+                                    <div class="form-check mb-3">
+                                        <input class="form-check-input" type="checkbox" id="monitor-logins">
+                                        <label class="form-check-label" for="monitor-logins">
+                                            Monitor Logins
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="col-lg-6">
+                            <div class="card bg-secondary mb-3">
+                                <div class="card-header">
+                                    <h6 class="m-0 font-weight-bold text-primary">Thresholds</h6>
+                                </div>
+                                <div class="card-body">
+                                    <div class="mb-3">
+                                        <label for="cpu-threshold" class="form-label">CPU Threshold (%)</label>
+                                        <input type="number" class="form-control" id="cpu-threshold" min="1" max="100">
+                                    </div>
+                                    <div class="mb-3">
+                                        <label for="memory-threshold" class="form-label">Memory Threshold (MB)</label>
+                                        <input type="number" class="form-control" id="memory-threshold" min="1">
+                                    </div>
+                                    <div class="mb-3">
+                                        <label for="monitoring-interval" class="form-label">Check Interval (seconds)</label>
+                                        <input type="number" class="form-control" id="monitoring-interval" min="5">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-lg-12">
+                            <div class="card bg-secondary">
+                                <div class="card-header">
+                                    <h6 class="m-0 font-weight-bold text-primary">API Keys & Email</h6>
+                                </div>
+                                <div class="card-body">
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <label for="virustotal-api" class="form-label">VirusTotal API Key</label>
+                                                <input type="password" class="form-control" id="virustotal-api">
+                                            </div>
+                                            <div class="mb-3">
+                                                <label for="otx-api" class="form-label">OTX API Key</label>
+                                                <input type="password" class="form-control" id="otx-api">
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="form-check mb-3">
+                                                <input class="form-check-input" type="checkbox" id="email-enabled">
+                                                <label class="form-check-label" for="email-enabled">
+                                                    Enable Email Alerts
+                                                </label>
+                                            </div>
+                                            <div class="mb-3">
+                                                <label for="email-to" class="form-label">Email To</label>
+                                                <input type="email" class="form-control" id="email-to">
+                                            </div>
+                                            <div class="mb-3">
+                                                <label for="email-from" class="form-label">Email From</label>
+                                                <input type="email" class="form-control" id="email-from">
+                                            </div>
+                                            <div class="mb-3">
+                                                <label for="email-password" class="form-label">Email App Password</label>
+                                                <input type="password" class="form-control" id="email-password">
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.min.js"></script>
+    <script src="/static/js/main.js"></script>
+</body>
+</html>
