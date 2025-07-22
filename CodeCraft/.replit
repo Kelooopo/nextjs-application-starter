@@ -1,0 +1,43 @@
+modules = ["python-3.11"]
+
+[nix]
+channel = "stable-24_05"
+packages = ["cairo", "cargo", "cyrus_sasl", "ffmpeg-full", "freetype", "ghostscript", "gobject-introspection", "gtk3", "imagemagickBig", "lcms2", "libayatana-appindicator", "libiconv", "libimagequant", "libjpeg", "libtiff", "libwebp", "libxcrypt", "openjpeg", "openldap", "openssl", "pkg-config", "qhull", "rustc", "sox", "tcl", "tcpdump", "tk", "wireshark", "xvfb-run", "yara", "zlib"]
+
+[workflows]
+runButton = "Project"
+
+[[workflows.workflow]]
+name = "Project"
+mode = "parallel"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "SentinelWatch Pro Server"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "SentinelWatch Enterprise"
+
+[[workflows.workflow]]
+name = "SentinelWatch Pro Server"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "pip install flask flask-socketio psutil watchdog matplotlib requests scapy cryptography pillow pystray && python app.py"
+waitForPort = 5000
+
+[[workflows.workflow]]
+name = "SentinelWatch Enterprise"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "pip install scikit-learn pandas numpy joblib && python run_enterprise.py"
+waitForPort = 5000
+
+[[ports]]
+localPort = 5000
+externalPort = 80
