@@ -1,0 +1,766 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SentinelWatch Pro Enterprise - Advanced Cybersecurity Platform</title>
+    
+    <!-- Bootstrap & Modern CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Chart.js for advanced visualizations -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+    
+    <!-- Socket.IO for real-time updates -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.js"></script>
+    
+    <style>
+        * {
+            font-family: 'Inter', sans-serif;
+        }
+        
+        body {
+            background: linear-gradient(135deg, #0c1426 0%, #1a2332 100%);
+            color: #e2e8f0;
+            margin: 0;
+            padding: 0;
+        }
+        
+        .enterprise-header {
+            background: linear-gradient(90deg, #1e293b 0%, #334155 100%);
+            border-bottom: 1px solid #475569;
+            padding: 1rem 2rem;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+        }
+        
+        .enterprise-logo {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #00d4ff;
+            display: flex;
+            align-items: center;
+        }
+        
+        .enterprise-logo i {
+            margin-right: 0.5rem;
+            color: #ff6b6b;
+        }
+        
+        .threat-level {
+            padding: 0.5rem 1rem;
+            border-radius: 20px;
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+        
+        .threat-medium {
+            background: linear-gradient(45deg, #f59e0b, #d97706);
+            color: white;
+        }
+        
+        .threat-high {
+            background: linear-gradient(45deg, #ef4444, #dc2626);
+            color: white;
+        }
+        
+        .threat-low {
+            background: linear-gradient(45deg, #10b981, #059669);
+            color: white;
+        }
+        
+        .enterprise-main {
+            display: grid;
+            grid-template-columns: 280px 1fr;
+            min-height: calc(100vh - 80px);
+        }
+        
+        .enterprise-sidebar {
+            background: #1e293b;
+            border-right: 1px solid #334155;
+            padding: 2rem 0;
+        }
+        
+        .sidebar-nav {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        
+        .sidebar-nav li {
+            margin: 0.5rem 0;
+        }
+        
+        .sidebar-nav a {
+            display: flex;
+            align-items: center;
+            padding: 0.75rem 1.5rem;
+            color: #cbd5e1;
+            text-decoration: none;
+            transition: all 0.3s ease;
+            border-left: 3px solid transparent;
+        }
+        
+        .sidebar-nav a:hover,
+        .sidebar-nav a.active {
+            background: #334155;
+            color: #00d4ff;
+            border-left-color: #00d4ff;
+        }
+        
+        .sidebar-nav i {
+            margin-right: 0.75rem;
+            width: 20px;
+            text-align: center;
+        }
+        
+        .enterprise-content {
+            padding: 2rem;
+            overflow-x: hidden;
+        }
+        
+        .enterprise-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+        
+        .stat-card {
+            background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+            border: 1px solid #475569;
+            border-radius: 12px;
+            padding: 1.5rem;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            transition: transform 0.3s ease;
+        }
+        
+        .stat-card:hover {
+            transform: translateY(-2px);
+        }
+        
+        .stat-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+        
+        .stat-title {
+            font-size: 0.9rem;
+            color: #94a3b8;
+            font-weight: 500;
+        }
+        
+        .stat-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+        }
+        
+        .stat-value {
+            font-size: 2rem;
+            font-weight: 700;
+            color: #e2e8f0;
+            margin-bottom: 0.5rem;
+        }
+        
+        .stat-change {
+            font-size: 0.8rem;
+            font-weight: 500;
+        }
+        
+        .stat-change.positive {
+            color: #10b981;
+        }
+        
+        .stat-change.negative {
+            color: #ef4444;
+        }
+        
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 2rem;
+            margin-bottom: 2rem;
+        }
+        
+        .chart-container {
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 12px;
+            padding: 1.5rem;
+        }
+        
+        .chart-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+        
+        .chart-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #e2e8f0;
+        }
+        
+        .enterprise-table {
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 12px;
+            overflow: hidden;
+        }
+        
+        .table-header {
+            background: #334155;
+            padding: 1rem 1.5rem;
+            border-bottom: 1px solid #475569;
+        }
+        
+        .table-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #e2e8f0;
+        }
+        
+        .incident-item {
+            padding: 1rem 1.5rem;
+            border-bottom: 1px solid #334155;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .incident-item:last-child {
+            border-bottom: none;
+        }
+        
+        .incident-details h6 {
+            margin: 0;
+            font-size: 0.9rem;
+            color: #e2e8f0;
+        }
+        
+        .incident-details small {
+            color: #94a3b8;
+        }
+        
+        .severity-badge {
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+        
+        .severity-critical {
+            background: #ef4444;
+            color: white;
+        }
+        
+        .severity-high {
+            background: #f59e0b;
+            color: white;
+        }
+        
+        .severity-medium {
+            background: #3b82f6;
+            color: white;
+        }
+        
+        .severity-low {
+            background: #10b981;
+            color: white;
+        }
+        
+        .ai-section {
+            margin-top: 2rem;
+        }
+        
+        .ai-card {
+            background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+            border: 1px solid #00d4ff;
+            border-radius: 12px;
+            padding: 1.5rem;
+            box-shadow: 0 0 20px rgba(0, 212, 255, 0.1);
+        }
+        
+        .ai-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+        
+        .ai-icon {
+            background: linear-gradient(45deg, #00d4ff, #0ea5e9);
+            width: 40px;
+            height: 40px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 1rem;
+        }
+        
+        .pulse {
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        .integration-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+        
+        .integration-card {
+            background: #334155;
+            border-radius: 8px;
+            padding: 1rem;
+            text-align: center;
+        }
+        
+        .integration-status {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 0.5rem;
+        }
+        
+        .status-active {
+            background: #10b981;
+        }
+        
+        .status-inactive {
+            background: #6b7280;
+        }
+        
+        .btn-enterprise {
+            background: linear-gradient(45deg, #00d4ff, #0ea5e9);
+            border: none;
+            color: white;
+            font-weight: 600;
+            padding: 0.5rem 1.5rem;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+        }
+        
+        .btn-enterprise:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 5px 15px rgba(0, 212, 255, 0.3);
+        }
+    </style>
+</head>
+<body>
+    <div class="enterprise-header">
+        <div class="d-flex justify-content-between align-items-center">
+            <div class="enterprise-logo">
+                <i class="fas fa-shield-alt"></i>
+                SentinelWatch Pro Enterprise
+            </div>
+            <div class="d-flex align-items-center">
+                <div class="threat-level threat-medium me-3">
+                    <i class="fas fa-exclamation-triangle me-1"></i>
+                    Threat Level: <span id="current-threat-level">Medium</span>
+                </div>
+                <div class="text-light">
+                    <i class="fas fa-user-circle me-2"></i>
+                    Security Admin
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="enterprise-main">
+        <div class="enterprise-sidebar">
+            <ul class="sidebar-nav">
+                <li><a href="#dashboard" class="nav-link active" data-tab="dashboard">
+                    <i class="fas fa-tachometer-alt"></i> Security Dashboard
+                </a></li>
+                <li><a href="#threats" class="nav-link" data-tab="threats">
+                    <i class="fas fa-exclamation-triangle"></i> AI Threat Detection
+                </a></li>
+                <li><a href="#incidents" class="nav-link" data-tab="incidents">
+                    <i class="fas fa-fire"></i> Security Incidents
+                </a></li>
+                <li><a href="#compliance" class="nav-link" data-tab="compliance">
+                    <i class="fas fa-clipboard-check"></i> Compliance Center
+                </a></li>
+                <li><a href="#integrations" class="nav-link" data-tab="integrations">
+                    <i class="fas fa-plug"></i> Enterprise Integrations
+                </a></li>
+                <li><a href="#analytics" class="nav-link" data-tab="analytics">
+                    <i class="fas fa-chart-line"></i> Security Analytics
+                </a></li>
+                <li><a href="#settings" class="nav-link" data-tab="settings">
+                    <i class="fas fa-cogs"></i> Configuration
+                </a></li>
+            </ul>
+        </div>
+        
+        <div class="enterprise-content">
+            <!-- Dashboard Tab -->
+            <div id="dashboard-tab" class="tab-content active">
+                <div class="enterprise-stats">
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <span class="stat-title">Active Threats</span>
+                            <div class="stat-icon" style="background: linear-gradient(45deg, #ef4444, #dc2626);">
+                                <i class="fas fa-exclamation-triangle text-white"></i>
+                            </div>
+                        </div>
+                        <div class="stat-value" id="active-threats">0</div>
+                        <div class="stat-change negative">
+                            <i class="fas fa-arrow-up me-1"></i>
+                            <span id="threats-change">+12% from last hour</span>
+                        </div>
+                    </div>
+                    
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <span class="stat-title">AI Predictions</span>
+                            <div class="stat-icon" style="background: linear-gradient(45deg, #00d4ff, #0ea5e9);">
+                                <i class="fas fa-brain text-white"></i>
+                            </div>
+                        </div>
+                        <div class="stat-value" id="ai-predictions">0</div>
+                        <div class="stat-change positive">
+                            <i class="fas fa-arrow-up me-1"></i>
+                            <span id="predictions-change">95.8% accuracy</span>
+                        </div>
+                    </div>
+                    
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <span class="stat-title">Active Incidents</span>
+                            <div class="stat-icon" style="background: linear-gradient(45deg, #f59e0b, #d97706);">
+                                <i class="fas fa-fire text-white"></i>
+                            </div>
+                        </div>
+                        <div class="stat-value" id="active-incidents">0</div>
+                        <div class="stat-change positive">
+                            <i class="fas fa-arrow-down me-1"></i>
+                            <span id="incidents-change">-5% from yesterday</span>
+                        </div>
+                    </div>
+                    
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <span class="stat-title">Compliance Score</span>
+                            <div class="stat-icon" style="background: linear-gradient(45deg, #10b981, #059669);">
+                                <i class="fas fa-shield-check text-white"></i>
+                            </div>
+                        </div>
+                        <div class="stat-value" id="compliance-score">87.5%</div>
+                        <div class="stat-change positive">
+                            <i class="fas fa-arrow-up me-1"></i>
+                            <span id="compliance-change">+2.1% this month</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="dashboard-grid">
+                    <div class="chart-container">
+                        <div class="chart-header">
+                            <h5 class="chart-title">Threat Detection Timeline</h5>
+                            <div class="btn-group btn-group-sm">
+                                <button class="btn btn-outline-light" onclick="updateChart('1h')">1H</button>
+                                <button class="btn btn-outline-light active" onclick="updateChart('24h')">24H</button>
+                                <button class="btn btn-outline-light" onclick="updateChart('7d')">7D</button>
+                            </div>
+                        </div>
+                        <div style="height: 300px;">
+                            <canvas id="threat-timeline-chart"></canvas>
+                        </div>
+                    </div>
+                    
+                    <div class="enterprise-table">
+                        <div class="table-header">
+                            <h5 class="table-title">Recent Security Incidents</h5>
+                        </div>
+                        <div id="recent-incidents">
+                            <div class="incident-item">
+                                <div class="incident-details">
+                                    <h6>Suspicious Network Activity</h6>
+                                    <small>2 minutes ago • AI Detection</small>
+                                </div>
+                                <span class="severity-badge severity-high">HIGH</span>
+                            </div>
+                            <div class="incident-item">
+                                <div class="incident-details">
+                                    <h6>Unauthorized Access Attempt</h6>
+                                    <small>15 minutes ago • System Monitor</small>
+                                </div>
+                                <span class="severity-badge severity-medium">MEDIUM</span>
+                            </div>
+                            <div class="incident-item">
+                                <div class="incident-details">
+                                    <h6>Malware Signature Match</h6>
+                                    <small>1 hour ago • Threat Intelligence</small>
+                                </div>
+                                <span class="severity-badge severity-critical">CRITICAL</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="ai-section">
+                    <div class="ai-card">
+                        <div class="ai-header">
+                            <div class="ai-icon pulse">
+                                <i class="fas fa-robot text-white"></i>
+                            </div>
+                            <div>
+                                <h5 class="mb-0">AI Threat Detection Engine</h5>
+                                <small class="text-muted">Real-time behavioral analysis and predictive security</small>
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-8">
+                                <canvas id="ai-confidence-chart" height="200"></canvas>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="ai-metrics">
+                                    <div class="mb-3">
+                                        <strong>Model Status:</strong> <span class="text-success">Active</span>
+                                    </div>
+                                    <div class="mb-3">
+                                        <strong>Events Analyzed:</strong> <span id="events-analyzed">0</span>
+                                    </div>
+                                    <div class="mb-3">
+                                        <strong>Patterns Learned:</strong> <span id="patterns-learned">0</span>
+                                    </div>
+                                    <div class="mb-3">
+                                        <strong>Last Training:</strong> <span id="last-training">Never</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Placeholder for other tabs -->
+            <div id="threats-tab" class="tab-content" style="display: none;">
+                <h3>AI Threat Detection</h3>
+                <p>Advanced machine learning threat detection capabilities will be displayed here.</p>
+            </div>
+            
+            <div id="incidents-tab" class="tab-content" style="display: none;">
+                <h3>Security Incidents</h3>
+                <p>Comprehensive incident management and response workflows.</p>
+            </div>
+            
+            <div id="compliance-tab" class="tab-content" style="display: none;">
+                <h3>Compliance Center</h3>
+                <p>SOC 2, PCI DSS, GDPR, and ISO 27001 compliance monitoring.</p>
+            </div>
+            
+            <div id="integrations-tab" class="tab-content" style="display: none;">
+                <h3>Enterprise Integrations</h3>
+                <div class="integration-grid" id="integration-status">
+                    <div class="integration-card">
+                        <div class="integration-status status-active"></div>
+                        <strong>SIEM Integration</strong>
+                        <div class="text-muted">Splunk Connected</div>
+                    </div>
+                    <div class="integration-card">
+                        <div class="integration-status status-active"></div>
+                        <strong>Cloud Security</strong>
+                        <div class="text-muted">AWS GuardDuty</div>
+                    </div>
+                    <div class="integration-card">
+                        <div class="integration-status status-inactive"></div>
+                        <strong>Ticketing System</strong>
+                        <div class="text-muted">Jira (Offline)</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // Enterprise Dashboard JavaScript
+        let socket;
+        let threatTimelineChart;
+        let aiConfidenceChart;
+        
+        // Initialize Socket.IO connection
+        function initializeSocket() {
+            socket = io();
+            
+            socket.on('connect', function() {
+                console.log('Connected to SentinelWatch Pro Enterprise');
+                socket.emit('subscribe_enterprise_updates');
+            });
+            
+            socket.on('enterprise_update', function(data) {
+                updateDashboardStats(data);
+                updateCharts(data);
+            });
+            
+            socket.on('enterprise_status', function(data) {
+                console.log('Enterprise platform status:', data);
+            });
+        }
+        
+        // Initialize charts
+        function initializeCharts() {
+            if (typeof Chart === 'undefined') {
+                console.error('Chart.js is not loaded');
+                return;
+            }
+            
+            // Threat timeline chart
+            const threatCtx = document.getElementById('threat-timeline-chart').getContext('2d');
+            threatTimelineChart = new Chart(threatCtx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Threats Detected',
+                        data: [],
+                        borderColor: '#ef4444',
+                        backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                        tension: 0.4,
+                        fill: true
+                    }, {
+                        label: 'AI Predictions',
+                        data: [],
+                        borderColor: '#00d4ff',
+                        backgroundColor: 'rgba(0, 212, 255, 0.1)',
+                        tension: 0.4,
+                        fill: false
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            labels: {
+                                color: '#e2e8f0'
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            ticks: { color: '#94a3b8' },
+                            grid: { color: '#334155' }
+                        },
+                        y: {
+                            ticks: { color: '#94a3b8' },
+                            grid: { color: '#334155' }
+                        }
+                    }
+                }
+            });
+            
+            // AI confidence chart
+            const aiCtx = document.getElementById('ai-confidence-chart').getContext('2d');
+            aiConfidenceChart = new Chart(aiCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['High Confidence', 'Medium Confidence', 'Low Confidence'],
+                    datasets: [{
+                        data: [65, 25, 10],
+                        backgroundColor: ['#10b981', '#f59e0b', '#ef4444'],
+                        borderColor: '#1e293b',
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                color: '#e2e8f0',
+                                padding: 20
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        
+        // Update dashboard statistics
+        function updateDashboardStats(data) {
+            if (data.active_incidents !== undefined) {
+                document.getElementById('active-incidents').textContent = data.active_incidents;
+            }
+            
+            if (data.ai_engine_status && data.ai_engine_status.events_analyzed !== undefined) {
+                document.getElementById('ai-predictions').textContent = data.ai_engine_status.events_analyzed;
+                document.getElementById('events-analyzed').textContent = data.ai_engine_status.events_analyzed;
+            }
+            
+            if (data.threat_level) {
+                document.getElementById('current-threat-level').textContent = data.threat_level;
+            }
+        }
+        
+        // Navigation handling
+        function handleNavigation() {
+            document.querySelectorAll('.nav-link').forEach(link => {
+                link.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    
+                    // Update active navigation
+                    document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
+                    this.classList.add('active');
+                    
+                    // Show/hide tab content
+                    const tab = this.getAttribute('data-tab');
+                    document.querySelectorAll('.tab-content').forEach(content => {
+                        content.style.display = 'none';
+                    });
+                    document.getElementById(tab + '-tab').style.display = 'block';
+                });
+            });
+        }
+        
+        // Load enterprise statistics
+        async function loadEnterpriseStats() {
+            try {
+                // This would make authenticated API calls in production
+                console.log('Loading enterprise statistics...');
+            } catch (error) {
+                console.error('Failed to load enterprise statistics:', error);
+            }
+        }
+        
+        // Update chart time period
+        function updateChart(period) {
+            document.querySelectorAll('.btn-group .btn').forEach(btn => btn.classList.remove('active'));
+            event.target.classList.add('active');
+            
+            // Would update chart data based on time period
+            console.log('Updating chart for period:', period);
+        }
+        
+        // Initialize everything when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            setTimeout(() => {
+                initializeSocket();
+                initializeCharts();
+                handleNavigation();
+                loadEnterpriseStats();
+            }, 100);
+        });
+    </script>
+</body>
+</html>
