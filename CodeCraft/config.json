@@ -1,0 +1,32 @@
+{
+    "whitelist_processes": [
+        "bash",
+        "python3",
+        "systemd"
+    ],
+    "monitored_ports": [
+        22,
+        3389,
+        5900,
+        80,
+        443
+    ],
+    "monitored_dirs": [
+        "/home/runner/Documents",
+        "/home/runner/Downloads"
+    ],
+    "email_enabled": false,
+    "email_to": "",
+    "email_from": "",
+    "email_password": "",
+    "virustotal_api_key": "",
+    "otx_api_key": "",
+    "monitor_logins": true,
+    "monitor_processes": true,
+    "monitor_network": true,
+    "monitor_files": false,
+    "process_cpu_threshold": 80.0,
+    "process_mem_threshold": 500.0,
+    "network_sniff_interface": "eth0",
+    "monitoring_interval": 30
+}
