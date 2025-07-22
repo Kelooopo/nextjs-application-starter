@@ -1,0 +1,28 @@
+[project]
+name = "repl-nix-workspace"
+version = "0.1.0"
+description = "Add your description here"
+requires-python = ">=3.11"
+dependencies = [
+    "flask-migrate>=4.1.0",
+    "flask>=3.1.1",
+    "flask-dance>=7.1.0",
+    "flask-login>=0.6.3",
+    "flask-socketio>=5.5.1",
+    "oauthlib>=3.3.1",
+    "openai>=1.97.0",
+    "psutil>=7.0.0",
+    "pyjwt>=2.10.1",
+    "sendgrid>=6.12.4",
+    "slack-sdk>=3.36.0",
+    "sqlalchemy>=2.0.41",
+    "flask-jwt-extended>=4.7.1",
+    "celery>=5.5.3",
+    "redis>=6.2.0",
+    "boto3>=1.39.10",
+    "elasticsearch>=9.0.2",
+    "flask-sqlalchemy>=3.1.1",
+    "paramiko>=3.5.1",
+    "prometheus-client>=0.22.1",
+    "microsoft-teams>=1.0.2",
+]
