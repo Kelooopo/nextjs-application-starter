@@ -1,0 +1,792 @@
+import sys
+sys.setrecursionlimit(1500)  # Increase recursion limit as a fallback
+import platform
+import psutil
+import socket
+import threading
+import os
+import time
+import json
+import smtplib
+from datetime import datetime
+from email.message import EmailMessage
+from tkinter import Tk, Frame, Label, scrolledtext, Entry, Button, TclError
+from tkinter import ttk
+from tkinter import messagebox
+import tkinter.font as tkFont
+from pystray import Icon, MenuItem as item, Menu
+from PIL import Image, ImageDraw
+from watchdog.observers import Observer
+from watchdog.events import FileSystemEventHandler
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+import subprocess
+import requests
+import hashlib
+from scapy.all import sniff, IP, TCP, UDP
+import base64
+from cryptography.fernet import Fernet
+
+# Dependency check
+try:
+    import psutil, pystray, PIL, watchdog, matplotlib, requests, scapy, cryptography
+    if platform.system() == "Windows":
+        import win32evtlog
+except ImportError as e:
+    print(f"Dependency error: {e}. Install with: pip install pystray Pillow psutil watchdog matplotlib requests scapy cryptography" + (" pywin32" if platform.system() == "Windows" else ""))
+    exit(1)
+
+# Global control flag
+running = True
+
+# Notification throttling
+last_popup_time = {'LOGIN FAILURE': 0, 'SUSPICIOUS PROCESS': 0, 'NETWORK ALERT': 0, 'FILE MODIFIED': 0, 'ERROR': 0, 'MALWARE ALERT': 0, 'RESOURCE ALERT': 0, 'ANOMALY DETECTED': 0, 'THREAT INTEL ALERT': 0}
+POPUP_THROTTLE_SECONDS = 30  # Throttle notifications to reduce spam
+ALERT_SUPPRESSION = {}  # Track repeated alerts to suppress duplicates
+
+# Process statistics for anomaly detection
+process_stats = {}  # {pid: {'name': str, 'cpu': [float], 'mem': [float]}}
+
+# Settings
+OS_SYSTEM = platform.system()
+CONFIG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'config.json')
+LOG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'logs')
+LOG_FILE = os.path.join(LOG_DIR, f"sentinelwatch_{datetime.now().strftime('%Y-%m-%d')}.log")
+ENCRYPTION_KEY_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'key.key')
+VIRUSTOTAL_API_KEY = ""  # Set your VirusTotal API key here or in config.json
+OTX_API_KEY = ""  # Set your AlienVault OTX API key here or in config.json
+DEFAULT_CONFIG = {
+    'whitelist_processes': ['explorer.exe', 'svchost.exe', 'cmd.exe', 'python.exe', 'py.exe'] if OS_SYSTEM == "Windows" else ['bash', 'python3'],
+    'monitored_ports': [22, 3389, 5900],
+    'monitored_dirs': [
+        os.path.expanduser('~/Documents').replace('/', '\\') if OS_SYSTEM == "Windows" else os.path.expanduser('~/Documents')
+    ],
+    'email_enabled': False,
+    'email_to': '',
+    'email_from': '',
+    'email_password': '',
+    'virustotal_api_key': VIRUSTOTAL_API_KEY,
+    'otx_api_key': OTX_API_KEY,
+    'monitor_logins': True,
+    'monitor_processes': True,
+    'monitor_network': True,
+    'monitor_files': False,  # Disabled by default to reduce notifications
+    'process_cpu_threshold': 80.0,  # CPU % threshold
+    'process_mem_threshold': 500.0,  # Memory MB threshold
+    'network_sniff_interface': 'eth0' if OS_SYSTEM != "Windows" else 'Ethernet',
+    'monitoring_interval': 30  # Seconds between checks
+}
+
+# Encryption for sensitive config data
+def generate_encryption_key():
+    key = Fernet.generate_key()
+    with open(ENCRYPTION_KEY_FILE, 'wb') as f:
+        f.write(key)
+    return key
+
+def load_encryption_key():
+    if os.path.exists(ENCRYPTION_KEY_FILE):
+        with open(ENCRYPTION_KEY_FILE, 'rb') as f:
+            return f.read()
+    return generate_encryption_key()
+
+cipher = Fernet(load_encryption_key())
+
+# Validate and create config
+try:
+    os.makedirs(LOG_DIR, exist_ok=True)
+    if not os.path.exists(CONFIG_FILE):
+        config = DEFAULT_CONFIG
+        if config['email_password']:
+            config['email_password'] = base64.b64encode(cipher.encrypt(config['email_password'].encode())).decode()
+        with open(CONFIG_FILE, 'w') as f:
+            json.dump(config, f, indent=4)
+    else:
+        with open(CONFIG_FILE, 'r') as f:
+            config = json.load(f)
+        # Ensure all default keys are present
+        for key, value in DEFAULT_CONFIG.items():
+            if key not in config:
+                config[key] = value
+        # Validate monitored directories
+        config['monitored_dirs'] = [d for d in config.get('monitored_dirs', []) if os.path.exists(d)]
+        if not config['monitored_dirs']:
+            config['monitored_dirs'] = DEFAULT_CONFIG['monitored_dirs']
+        # Decrypt email password
+        if config.get('email_password'):
+            try:
+                config['email_password'] = cipher.decrypt(base64.b64decode(config['email_password'])).decode()
+            except:
+                config['email_password'] = ''
+        # Save updated config
+        with open(CONFIG_FILE, 'w') as f:
+            json.dump(config, f, indent=4)
+except Exception as e:
+    print(f"Error loading config: {e}")
+    config = DEFAULT_CONFIG
+    with open(CONFIG_FILE, 'w') as f:
+        json.dump(config, f, indent=4)
+
+# Tkinter GUI setup
+root = Tk()
+root.title("SentinelWatch Pro")
+root.geometry("800x600")
+root.resizable(False, False)
+root.configure(bg="#f0f0f0")
+root.protocol("WM_DELETE_WINDOW", lambda: root.iconify())
+
+# Font and style
+button_font = tkFont.Font(family="Arial", size=12, weight="bold")
+label_font = tkFont.Font(family="Arial", size=14)
+
+# Define tabs before sidebar configuration
+tabs = ["Home", "Alerts", "Logs", "Dashboard", "Settings"]
+
+# Sidebar
+sidebar = Frame(root, bg="#2c3e50", width=200)
+sidebar.pack(side="left", fill="y")
+sidebar.grid_rowconfigure(tuple(range(len(tabs))), weight=1)  # Equal weight for all rows
+
+# Content frame
+content_frame = Frame(root, bg="#f0f0f0")
+content_frame.pack(side="right", fill="both", expand=True)
+
+# Current content frame to manage visibility
+current_content = None
+
+def show_content(frame):
+    global current_content
+    if current_content:
+        current_content.pack_forget()
+    current_content = frame
+    current_content.pack(fill="both", expand=True, padx=20, pady=20)
+
+# Sidebar buttons with hover effects
+tab_frames = {}
+
+# Configure ttk style for buttons
+style = ttk.Style()
+style.configure("Sidebar.TButton", font=button_font, padding=10, background="#34495e", foreground="white")
+style.map("Sidebar.TButton",
+          background=[("active", "#1abc9c"), ("!active", "#34495e")],
+          foreground=[("active", "white"), ("!active", "white")])
+
+for i, tab in enumerate(tabs):
+    frame = Frame(content_frame, bg="#f0f0f0")
+    tab_frames[tab] = frame
+    btn = ttk.Button(sidebar, text=tab, style="Sidebar.TButton", command=lambda f=frame: show_content(f))
+    btn.grid(row=i, column=0, sticky="nsew", pady=10, padx=10)  # Even spacing with grid
+    # Hover effects
+    btn.bind("<Enter>", lambda e, b=btn: b.configure(style="Sidebar.TButton"))
+    btn.bind("<Leave>", lambda e, b=btn: b.configure(style="Sidebar.TButton"))
+
+# Home tab
+home_frame = tab_frames["Home"]
+Label(home_frame, text="SentinelWatch Pro", font=("Arial", 20, "bold"), bg="#f0f0f0").pack(pady=10)
+status_label = Label(home_frame, text="Your PC is Protected", font=label_font, fg="green", bg="#f0f0f0")
+status_label.pack(pady=10)
+Label(home_frame, text="Click the tabs on the left to view alerts, logs, or configure settings.", font=("Arial", 12), bg="#f0f0f0").pack(pady=10)
+
+# Alerts tab
+alerts_frame = tab_frames["Alerts"]
+Label(alerts_frame, text="Alerts", font=label_font, bg="#f0f0f0").pack(pady=5)
+Label(alerts_frame, text="Filter Alerts", font=("Arial", 10), bg="#f0f0f0").pack()
+filter_var = ttk.Combobox(alerts_frame, values=["All", "Low", "Medium", "High", "Login", "Process", "Network", "File", "Anomaly", "Threat Intel"], state="readonly")
+filter_var.set("All")
+filter_var.pack()
+alert_list = scrolledtext.ScrolledText(alerts_frame, height=20, width=70, state='disabled', font=("Arial", 10))
+alert_list.pack(pady=5)
+
+# Logs tab
+logs_frame = tab_frames["Logs"]
+Label(logs_frame, text="Event Logs", font=label_font, bg="#f0f0f0").pack(pady=5)
+log_text = scrolledtext.ScrolledText(logs_frame, height=20, width=70, state='disabled', font=("Arial", 10))
+log_text.pack(pady=5)
+Button(logs_frame, text="Clear Logs", font=button_font, command=lambda: clear_logs(), bg="#3498db", fg="white").pack(pady=5)
+
+# Dashboard tab
+dashboard_frame = tab_frames["Dashboard"]
+Label(dashboard_frame, text="Security Dashboard", font=label_font, bg="#f0f0f0").pack(pady=5)
+time_frame = Frame(dashboard_frame, bg="#f0f0f0")
+time_frame.pack(pady=5)
+for period in ["Last Hour", "Last Day", "Last Week"]:
+    Button(time_frame, text=period, font=("Arial", 10), bg="#3498db", fg="white",
+           command=lambda p=period: update_visualization(p)).pack(side="left", padx=5)
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 3))
+canvas = FigureCanvasTkAgg(fig, master=dashboard_frame)
+canvas.get_tk_widget().pack(pady=5)
+login_attempts = {'success': 0, 'failure': 0}
+alert_counts = {'Low': 0, 'Medium': 0, 'High': 0}
+
+# Settings tab
+settings_frame = tab_frames["Settings"]
+Label(settings_frame, text="Settings", font=label_font, bg="#f0f0f0").pack(pady=5)
+Label(settings_frame, text="Allowed Programs (comma-separated)", font=("Arial", 10), bg="#f0f0f0").pack()
+whitelist_entry = Entry(settings_frame, width=50, font=("Arial", 10))
+whitelist_entry.insert(0, ','.join(config['whitelist_processes']))
+whitelist_entry.pack()
+Label(settings_frame, text="Monitored Ports (comma-separated)", font=("Arial", 10), bg="#f0f0f0").pack()
+ports_entry = Entry(settings_frame, width=50, font=("Arial", 10))
+ports_entry.insert(0, ','.join(map(str, config['monitored_ports'])))
+ports_entry.pack()
+Label(settings_frame, text="Monitored Folders (comma-separated)", font=("Arial", 10), bg="#f0f0f0").pack()
+dirs_entry = Entry(settings_frame, width=50, font=("Arial", 10))
+dirs_entry.insert(0, ','.join(config['monitored_dirs']))
+dirs_entry.pack()
+Label(settings_frame, text="VirusTotal API Key", font=("Arial", 10), bg="#f0f0f0").pack()
+vt_api_entry = Entry(settings_frame, width=50, font=("Arial", 10))
+vt_api_entry.insert(0, config.get('virustotal_api_key', ''))
+vt_api_entry.pack()
+Label(settings_frame, text="OTX API Key", font=("Arial", 10), bg="#f0f0f0").pack()
+otx_api_entry = Entry(settings_frame, width=50, font=("Arial", 10))
+otx_api_entry.insert(0, config.get('otx_api_key', ''))
+otx_api_entry.pack()
+Label(settings_frame, text="Check Interval (seconds)", font=("Arial", 10), bg="#f0f0f0").pack()
+interval_entry = Entry(settings_frame, width=50, font=("Arial", 10))
+interval_entry.insert(0, str(config['monitoring_interval']))
+interval_entry.pack()
+Label(settings_frame, text="Network Interface", font=("Arial", 10), bg="#f0f0f0").pack()
+interface_entry = Entry(settings_frame, width=50, font=("Arial", 10))
+interface_entry.insert(0, config['network_sniff_interface'])
+interface_entry.pack()
+Label(settings_frame, text="Enable Monitoring", font=("Arial", 10), bg="#f0f0f0").pack()
+login_var = ttk.Checkbutton(settings_frame, text="Monitor Logins")
+login_var.state(['selected'] if config['monitor_logins'] else [])
+login_var.pack()
+process_var = ttk.Checkbutton(settings_frame, text="Monitor Programs")
+process_var.state(['selected'] if config['monitor_processes'] else [])
+process_var.pack()
+network_var = ttk.Checkbutton(settings_frame, text="Monitor Network")
+network_var.state(['selected'] if config['monitor_network'] else [])
+network_var.pack()
+file_var = ttk.Checkbutton(settings_frame, text="Monitor Files")
+file_var.state(['selected'] if config['monitor_files'] else [])
+file_var.pack()
+Label(settings_frame, text="Email Notifications", font=("Arial", 10), bg="#f0f0f0").pack()
+email_var = ttk.Checkbutton(settings_frame, text="Enable Email Alerts")
+email_var.state(['selected'] if config['email_enabled'] else [])
+email_var.pack()
+Label(settings_frame, text="Email To", font=("Arial", 10), bg="#f0f0f0").pack()
+email_to_entry = Entry(settings_frame, width=50, font=("Arial", 10))
+email_to_entry.insert(0, config['email_to'])
+email_to_entry.pack()
+Label(settings_frame, text="Email From", font=("Arial", 10), bg="#f0f0f0").pack()
+email_from_entry = Entry(settings_frame, width=50, font=("Arial", 10))
+email_from_entry.insert(0, config['email_from'])
+email_from_entry.pack()
+Label(settings_frame, text="Email App Password", font=("Arial", 10), bg="#f0f0f0").pack()
+email_password_entry = Entry(settings_frame, width=50, show="*", font=("Arial", 10))
+email_password_entry.insert(0, config['email_password'])
+email_password_entry.pack()
+Button(settings_frame, text="Save Settings", font=button_font, command=lambda: save_settings(), bg="#3498db", fg="white").pack(pady=10)
+
+# Show Home tab by default
+show_content(home_frame)
+
+def save_settings():
+    try:
+        config['whitelist_processes'] = [p.strip() for p in whitelist_entry.get().split(',') if p.strip()]
+        ports = [int(p) for p in ports_entry.get().split(',') if p.strip().isdigit() and 0 <= int(p) <= 65535]
+        if not ports:
+            raise ValueError("Invalid or empty ports")
+        config['monitored_ports'] = ports
+        dirs = [d.strip() for d in dirs_entry.get().split(',') if d.strip() and os.path.exists(d.strip())]
+        if not dirs:
+            raise ValueError("No valid folders")
+        config['monitored_dirs'] = dirs
+        config['virustotal_api_key'] = vt_api_entry.get().strip()
+        config['otx_api_key'] = otx_api_entry.get().strip()
+        interval = int(interval_entry.get().strip()) if interval_entry.get().strip().isdigit() else config['monitoring_interval']
+        config['monitoring_interval'] = max(10, min(interval, 300))
+        config['network_sniff_interface'] = interface_entry.get().strip() or DEFAULT_CONFIG['network_sniff_interface']
+        config['monitor_logins'] = login_var.instate(['selected'])
+        config['monitor_processes'] = process_var.instate(['selected'])
+        config['monitor_network'] = network_var.instate(['selected'])
+        config['monitor_files'] = file_var.instate(['selected'])
+        config['email_enabled'] = email_var.instate(['selected'])
+        config['email_to'] = email_to_entry.get().strip()
+        config['email_from'] = email_from_entry.get().strip()
+        email_password = email_password_entry.get().strip()
+        if email_password:
+            config['email_password'] = base64.b64encode(cipher.encrypt(email_password.encode())).decode()
+        else:
+            config['email_password'] = ''
+        with open(CONFIG_FILE, 'w') as f:
+            json.dump(config, f, indent=4)
+        log_event("INFO", "Settings updated", severity="Low")
+        root.after(0, lambda: messagebox.showinfo("Success", "Settings saved successfully!"))
+    except Exception as e:
+        log_error(f"Failed to save settings: {e}")
+        root.after(0, lambda: messagebox.showerror("Error", f"Failed to save settings: {str(e)}"))
+
+def clear_logs():
+    try:
+        log_text.config(state='normal')
+        log_text.delete(1.0, 'end')
+        log_text.config(state='disabled')
+        alert_list.config(state='normal')
+        alert_list.delete(1.0, 'end')
+        alert_list.config(state='disabled')
+        filter_alerts()  # Refresh alerts after clearing
+    except Exception as e:
+        log_error(f"Failed to clear logs: {e}")
+
+def filter_alerts():
+    alert_list.config(state='normal')
+    alert_list.delete(1.0, 'end')
+    filter_type = filter_var.get()
+    try:
+        with open(LOG_FILE, 'r', encoding='utf-8') as f:
+            for line in f:
+                event = json.loads(line)
+                if filter_type == "All" or \
+                   (filter_type in ["Low", "Medium", "High"] and event["severity"] == filter_type) or \
+                   (filter_type == "Login" and event["event_type"].startswith("LOGIN")) or \
+                   (filter_type == "Process" and event["event_type"] in ["SUSPICIOUS PROCESS", "RESOURCE ALERT", "ANOMALY DETECTED"]) or \
+                   (filter_type == "Network" and event["event_type"] in ["NETWORK ALERT", "THREAT INTEL ALERT"]) or \
+                   (filter_type == "File" and event["event_type"] in ["FILE MODIFIED", "MALWARE ALERT"]) or \
+                   (filter_type == "Anomaly" and event["event_type"] == "ANOMALY DETECTED") or \
+                   (filter_type == "Threat Intel" and event["event_type"] == "THREAT INTEL ALERT"):
+                    alert_list.insert('end', f"[{event['timestamp']}] {event['severity']} {event['event_type']}: {event['detail']}\n")
+    except Exception as e:
+        log_error(f"Error filtering alerts: {e}")
+    alert_list.config(state='disabled')
+    alert_list.see('end')
+
+def log_event(event_type, detail, popup=False, severity="Medium"):
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    message = {
+        "timestamp": timestamp,
+        "event_type": event_type,
+        "detail": detail,
+        "severity": severity
+    }
+    try:
+        with open(LOG_FILE, 'a', encoding='utf-8') as f:
+            json.dump(message, f)
+            f.write('\n')
+        # Simplify notification for non-technical users
+        if event_type == "LOGIN FAILURE":
+            message_str = f"[{timestamp}] Warning: Failed login attempt detected."
+        elif event_type == "SUSPICIOUS PROCESS":
+            message_str = f"[{timestamp}] New program detected: {detail.split('Process: ')[1].split(' (PID')[0]}."
+        elif event_type == "NETWORK ALERT":
+            message_str = f"[{timestamp}] Suspicious network activity on port {detail.split('port ')[1].split(' ')[0] if 'port' in detail else detail}."
+        elif event_type == "FILE MODIFIED":
+            message_str = f"[{timestamp}] File changed: {os.path.basename(detail.split('File changed: ')[1])}."
+        elif event_type == "MALWARE ALERT":
+            message_str = f"[{timestamp}] Possible threat detected: {detail.split('file detected: ')[1]}."
+        elif event_type == "RESOURCE ALERT":
+            message_str = f"[{timestamp}] Program using high resources: {detail.split('Process: ')[1].split(' (PID')[0]}."
+        elif event_type == "ANOMALY DETECTED":
+            message_str = f"[{timestamp}] Unusual activity detected: {detail.split('Process: ')[1].split(' (PID')[0]}."
+        elif event_type == "THREAT INTEL ALERT":
+            message_str = f"[{timestamp}] Malicious network source detected: {detail.split('IP detected: ')[1]}."
+        else:
+            message_str = f"[{timestamp}] {severity} {event_type}: {detail}"
+        # Suppress duplicate alerts
+        alert_key = f"{event_type}:{detail}"
+        if alert_key in ALERT_SUPPRESSION and (time.time() - ALERT_SUPPRESSION[alert_key]) < 300:
+            return  # Skip duplicate alerts within 5 minutes
+        ALERT_SUPPRESSION[alert_key] = time.time()
+        if popup and (time.time() - last_popup_time.get(event_type, 0)) >= POPUP_THROTTLE_SECONDS and severity in ["Medium", "High"]:
+            root.after(0, lambda: update_log_text(message_str, popup, event_type, severity))
+            last_popup_time[event_type] = time.time()
+            alert_counts[severity] += 1
+        else:
+            root.after(0, lambda: update_log_text(message_str, False, event_type, severity))
+    except Exception as e:
+        print(f"Error logging event: {e}")
+
+def log_error(detail):
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    message = {
+        "timestamp": timestamp,
+        "event_type": "ERROR",
+        "detail": detail,
+        "severity": "High"
+    }
+    try:
+        with open(LOG_FILE, 'a', encoding='utf-8') as f:
+            json.dump(message, f)
+            f.write('\n')
+    except Exception as e:
+        print(f"Error writing to log file: {e}")
+
+def update_log_text(message, popup, event_type, severity):
+    try:
+        log_text.config(state='normal')
+        log_text.insert('end', message + '\n')
+        log_text.config(state='disabled')
+        log_text.see('end')
+        if popup:
+            alert_list.config(state='normal')
+            alert_list.insert('end', message + '\n')
+            alert_list.config(state='disabled')
+            alert_list.see('end')
+            # Create a custom notification window with fade-in
+            notification = Tk()
+            notification.title("SentinelWatch Alert")
+            notification.geometry("400x200")
+            notification.resizable(False, False)
+            notification.configure(bg="#f0f0f0")
+            notification.attributes('-alpha', 0.0)  # Start transparent
+            Label(notification, text="Security Alert", font=("Arial", 14, "bold"), bg="#f0f0f0", fg="red" if severity == "High" else "orange").pack(pady=10)
+            Label(notification, text=message, font=("Arial", 10), bg="#f0f0f0", wraplength=350).pack(pady=5)
+            if event_type in ["SUSPICIOUS PROCESS", "RESOURCE ALERT", "ANOMALY DETECTED"]:
+                pid = int(message.split('PID: ')[1].split(')')[0]) if 'PID' in message else None
+                Button(notification, text="Allow", font=button_font, bg="#2ecc71", fg="white", command=lambda: notification.destroy()).pack(side="left", padx=10, pady=10)
+                if pid:
+                    Button(notification, text="Block", font=button_font, bg="#e74c3c", fg="white", command=lambda: [kill_process(pid), notification.destroy()]).pack(side="right", padx=10, pady=10)
+            else:
+                Button(notification, text="OK", font=button_font, bg="#3498db", fg="white", command=notification.destroy).pack(pady=10)
+            def fade_in(alpha=0.0):
+                alpha += 0.1
+                notification.attributes('-alpha', alpha)
+                if alpha < 1.0:
+                    notification.after(50, lambda: fade_in(alpha))
+            fade_in()
+            notification.after(10000, notification.destroy)  # Auto-close after 10 seconds
+            if config['email_enabled']:
+                send_email(f"SentinelWatch Alert ({severity})", message)
+        status_label.config(text="Threat Detected!" if severity == "High" else "Your PC is Protected", fg="red" if severity == "High" else "green")
+    except Exception as e:
+        log_error(f"Error updating log text: {e}")
+
+def send_email(subject, body):
+    if not config['email_enabled'] or not config['email_to'] or not config['email_from'] or not config['email_password']:
+        return
+    msg = EmailMessage()
+    msg.set_content(body)
+    msg['Subject'] = subject
+    msg['From'] = config['email_from']
+    msg['To'] = config['email_to']
+    try:
+        with smtplib.SMTP_SSL('smtp.gmail.com', 465) as smtp:
+            smtp.login(config['email_from'], config['email_password'])
+            smtp.send_message(msg)
+    except Exception as e:
+        log_error(f"Email sending failed: {e}")
+
+def send_daily_report():
+    while running:
+        try:
+            if config['email_enabled']:
+                report = f"SentinelWatch Daily Report ({datetime.now().strftime('%Y-%m-%d')}):\n"
+                report += f"Login Attempts: {login_attempts['success']} successful, {login_attempts['failure']} failed\n"
+                report += f"Alerts: {alert_counts['Low']} Low, {alert_counts['Medium']} Medium, {alert_counts['High']} High\n"
+                send_email("SentinelWatch Daily Report", report)
+            time.sleep(86400)  # 24 hours
+        except Exception as e:
+            log_error(f"Daily report error: {e}")
+
+def update_visualization(period="Last Day"):
+    try:
+        ax1.clear()
+        ax2.clear()
+        # Reset counts based on period
+        time_threshold = {"Last Hour": 3600, "Last Day": 86400, "Last Week": 604800}
+        login_counts = {'success': 0, 'failure': 0}
+        alert_severity = {'Low': 0, 'Medium': 0, 'High': 0}
+        cutoff_time = time.time() - time_threshold.get(period, 86400)
+        try:
+            with open(LOG_FILE, 'r', encoding='utf-8') as f:
+                for line in f:
+                    event = json.loads(line)
+                    event_time = time.mktime(datetime.strptime(event['timestamp'], "%Y-%m-%d %H:%M:%S").timetuple())
+                    if event_time >= cutoff_time:
+                        if event['event_type'] == "LOGIN SUCCESS":
+                            login_counts['success'] += 1
+                        elif event['event_type'] == "LOGIN FAILURE":
+                            login_counts['failure'] += 1
+                        alert_severity[event['severity']] += 1
+        except Exception as e:
+            log_error(f"Error reading logs for visualization: {e}")
+        ax1.bar(['Success', 'Failure'], [login_counts['success'], login_counts['failure']], color=['#2ecc71', '#e74c3c'])
+        ax1.set_title("Login Attempts")
+        ax2.pie([alert_severity['Low'], alert_severity['Medium'], alert_severity['High']],
+                labels=['Low', 'Medium', 'High'], colors=['#2ecc71', '#f1c40f', '#e74c3c'], autopct='%1.1f%%')
+        ax2.set_title("Alert Severity")
+        plt.tight_layout()
+        canvas.draw()
+        root.after(60000, lambda: update_visualization(period))
+    except Exception as e:
+        log_error(f"Visualization error: {e}")
+
+def scan_file_virustotal(file_path):
+    if not config.get('virustotal_api_key'):
+        return None
+    try:
+        with open(file_path, 'rb') as f:
+            file_hash = hashlib.sha256(f.read()).hexdigest()
+        url = f"https://www.virustotal.com/api/v3/files/{file_hash}"
+        headers = {"x-apikey": config['virustotal_api_key']}
+        response = requests.get(url, headers=headers)
+        if response.status_code == 200:
+            result = response.json()
+            positives = result['data']['attributes']['last_analysis_stats']['malicious']
+            if positives > 0:
+                return f"Malicious file detected: {file_path} ({positives} positives)"
+            return None
+        else:
+            return f"VirusTotal scan failed for {file_path}: {response.status_code}"
+    except Exception as e:
+        return f"VirusTotal scan error for {file_path}: {e}"
+
+def monitor_logins_windows():
+    if not config['monitor_logins']:
+        return
+    try:
+        hand = win32evtlog.OpenEventLog('localhost', 'Security')
+    except Exception as e:
+        log_event("ERROR", "Cannot access login logs. Please run as administrator.", popup=True, severity="High")
+        return
+    flags = win32evtlog.EVENTLOG_FORWARDS_READ | win32evtlog.EVENTLOG_SEQUENTIAL_READ
+    processed_ids = set()
+
+    while running:
+        try:
+            events = win32evtlog.ReadEventLog(hand, flags, 0)
+            for event in events:
+                key = (event.RecordNumber, event.TimeGenerated)
+                if key in processed_ids:
+                    continue
+                processed_ids.add(key)
+                if event.EventID in [4624, 4625]:
+                    try:
+                        user = event.StringInserts[5] if len(event.StringInserts) > 5 else "Unknown"
+                        ip = event.StringInserts[18] if len(event.StringInserts) > 18 else "N/A"
+                        reason = event.StringInserts[8] if event.EventID == 4625 and len(event.StringInserts) > 8 else ""
+                    except:
+                        user, ip, reason = "Unknown", "Unknown", "Error parsing"
+                    if event.EventID == 4624:
+                        login_attempts['success'] += 1
+                        log_event("LOGIN SUCCESS", f"User: {user}, IP: {ip}", severity="Low")
+                    elif event.EventID == 4625:
+                        login_attempts['failure'] += 1
+                        log_event("LOGIN FAILURE", f"User: {user}, Reason: {reason}", popup=True, severity="High")
+            time.sleep(config['monitoring_interval'])
+        except Exception as e:
+            log_event("ERROR", f"Error reading login logs: {e}", severity="Medium")
+            time.sleep(config['monitoring_interval'])
+    win32evtlog.CloseEventLog(hand)
+
+def monitor_logins_linux():
+    if not config['monitor_logins']:
+        return
+    log_file = '/var/log/auth.log' if os.path.exists('/var/log/auth.log') else '/var/log/secure'
+    try:
+        with open(log_file, 'r') as f:
+            f.seek(0, os.SEEK_END)
+            while running:
+                line = f.readline()
+                if not line:
+                    time.sleep(1)
+                    continue
+                if 'Accepted password' in line:
+                    user = line.split('for ')[-1].split(' ')[0]
+                    ip = line.split('from ')[-1].split(' ')[0]
+                    login_attempts['success'] += 1
+                    log_event("LOGIN SUCCESS", f"User: {user}, IP: {ip}", severity="Low")
+                elif 'Failed password' in line:
+                    user = line.split('for ')[-1].split(' ')[0]
+                    ip = line.split('from ')[-1].split(' ')[0]
+                    login_attempts['failure'] += 1
+                    log_event("LOGIN FAILURE", f"User: {user}, IP: {ip}", popup=True, severity="High")
+    except Exception as e:
+        log_event("ERROR", f"Cannot access login logs: {e}. Ensure sudo access.", popup=True, severity="High")
+
+def monitor_logins_macos():
+    if not config['monitor_logins']:
+        return
+    try:
+        while running:
+            result = subprocess.run(['log', 'show', '--last', '1m', '--predicate', 'eventMessage CONTAINS "authentication"'], capture_output=True, text=True)
+            lines = result.stdout.splitlines()
+            for line in lines:
+                if 'succeeded' in line.lower():
+                    user = line.split('user ')[-1].split(' ')[0] if 'user ' in line else "Unknown"
+                    ip = line.split('from ')[-1].split(' ')[0] if 'from ' in line else "N/A"
+                    login_attempts['success'] += 1
+                    log_event("LOGIN SUCCESS", f"User: {user}, IP: {ip}", severity="Low")
+                elif 'failed' in line.lower():
+                    user = line.split('user ')[-1].split(' ')[0] if 'user ' in line else "Unknown"
+                    ip = line.split('from ')[-1].split(' ')[0] if 'from ' in line else "N/A"
+                    login_attempts['failure'] += 1
+                    log_event("LOGIN FAILURE", f"User: {user}, IP: {ip}", popup=True, severity="High")
+            time.sleep(config['monitoring_interval'])
+        except Exception as e:
+            log_event("ERROR", f"Cannot access system logs: {e}. Ensure sudo access.", popup=True, severity="High")
+
+def monitor_processes():
+    if not config['monitor_processes']:
+        return
+    global process_stats
+    while running:
+        try:
+            for proc in psutil.process_iter(['name', 'pid', 'cpu_percent', 'memory_info']):
+                name = proc.info['name'].lower()
+                pid = proc.info['pid']
+                cpu = proc.info['cpu_percent']
+                mem = proc.info['memory_info'].rss / 1024 / 1024  # Convert to MB
+                if pid not in process_stats:
+                    process_stats[pid] = {'name': name, 'cpu': [], 'mem': []}
+                process_stats[pid]['cpu'].append(cpu)
+                process_stats[pid]['mem'].append(mem)
+                process_stats[pid]['cpu'] = process_stats[pid]['cpu'][-10:]  # Keep last 10 readings
+                process_stats[pid]['mem'] = process_stats[pid]['mem'][-10:]
+                # Check for anomalies (>2 std devs from mean)
+                if len(process_stats[pid]['cpu']) > 5:
+                    cpu_mean = sum(process_stats[pid]['cpu']) / len(process_stats[pid]['cpu'])
+                    cpu_std = (sum((x - cpu_mean) ** 2 for x in process_stats[pid]['cpu']) / len(process_stats[pid]['cpu'])) ** 0.5
+                    if cpu_std > 0 and cpu > cpu_mean + 2 * cpu_std:
+                        log_event("ANOMALY DETECTED", f"Process: {name} (PID: {pid}) unusual CPU usage: {cpu:.1f}%", popup=True, severity="High")
+                if name not in config['whitelist_processes']:
+                    log_event("SUSPICIOUS PROCESS", f"Process: {name} (PID: {pid})", popup=True, severity="Medium")
+                if cpu > config['process_cpu_threshold'] or mem > config['process_mem_threshold']:
+                    log_event("RESOURCE ALERT", f"Process: {name} (PID: {pid}) CPU: {cpu:.1f}% Mem: {mem:.1f}MB", popup=True, severity="High")
+            time.sleep(config['monitoring_interval'])
+        except Exception as e:
+            log_event("ERROR", f"Program monitoring error: {e}", severity="Medium")
+            time.sleep(config['monitoring_interval'])
+
+def kill_process(pid):
+    try:
+        proc = psutil.Process(pid)
+        proc.terminate()
+        log_event("ACTION", f"Stopped program (PID: {pid})", severity="Low")
+    except Exception as e:
+        log_event("ERROR", f"Failed to stop program: {e}", popup=True, severity="Medium")
+
+def monitor_network():
+    if not config['monitor_network']:
+        return
+    while running:
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(1)
+            for port in config['monitored_ports']:
+                result = sock.connect_ex(('localhost', port))
+                if result == 0:
+                    log_event("NETWORK ALERT", f"Open port detected: {port}", popup=True, severity="Medium")
+            sock.close()
+            time.sleep(config['monitoring_interval'])
+        except Exception as e:
+            log_event("ERROR", f"Network monitoring error: {e}", severity="Medium")
+            time.sleep(config['monitoring_interval'])
+
+def monitor_network_traffic():
+    if not config['monitor_network']:
+        return
+    otx_api_key = config.get('otx_api_key', '')
+    def packet_callback(packet):
+        try:
+            if IP in packet and (TCP in packet or UDP in packet):
+                src_ip = packet[IP].src
+                dst_ip = packet[IP].dst
+                proto = "TCP" if TCP in packet else "UDP"
+                dport = packet[TCP].dport if proto == "TCP" else packet[UDP].dport
+                if dport in config['monitored_ports']:
+                    log_event("NETWORK ALERT", f"Suspicious {proto} traffic to port {dport}: {src_ip} -> {dst_ip}", popup=True, severity="High")
+                if otx_api_key:
+                    try:
+                        response = requests.get(f"https://otx.alienvault.com/api/v1/indicators/IPv4/{src_ip}/general", headers={"X-OTX-API-KEY": otx_api_key})
+                        if response.status_code == 200 and response.json().get('pulse_count', 0) > 0:
+                            log_event("THREAT INTEL ALERT", f"Malicious IP detected: {src_ip} (Source: OTX)", popup=True, severity="High")
+                    except Exception as e:
+                        log_event("ERROR", f"OTX API error for IP {src_ip}: {e}", severity="Medium")
+        except Exception as e:
+            log_event("ERROR", f"Network traffic monitoring error: {e}", severity="Medium")
+    try:
+        sniff(iface=config['network_sniff_interface'], prn=packet_callback, store=0, stop_filter=lambda x: not running, timeout=config['monitoring_interval'])
+    except Exception as e:
+        log_event("ERROR", f"Network traffic monitoring failed: {e}. Install npcap from https://nmap.org/npcap/ and run as administrator.", popup=True, severity="High")
+
+class FileChangeHandler(FileSystemEventHandler):
+    def on_modified(self, event):
+        if not config['monitor_files'] or event.is_directory or event.src_path.endswith(('.tmp', '.log', '.cache')):
+            return
+        log_event("FILE MODIFIED", f"File changed: {event.src_path}", popup=True, severity="Medium")
+        if config.get('virustotal_api_key'):
+            vt_result = scan_file_virustotal(event.src_path)
+            if vt_result:
+                log_event("MALWARE ALERT", vt_result, popup=True, severity="High")
+
+def monitor_files():
+    if not config['monitor_files']:
+        return
+    observer = Observer()
+    handler = FileChangeHandler()
+    for dir_path in config['monitored_dirs']:
+        if os.path.exists(dir_path):
+            try:
+                observer.schedule(handler, dir_path, recursive=True)
+            except Exception as e:
+                log_event("ERROR", f"Failed to monitor folder {dir_path}: {e}", severity="Medium")
+        else:
+            log_event("ERROR", f"Folder {dir_path} does not exist", popup=True, severity="High")
+    try:
+        observer.start()
+        while running:
+            time.sleep(1)
+        observer.stop()
+        observer.join()
+    except Exception as e:
+        log_event("ERROR", f"File monitoring error: {e}", severity="Medium")
+
+def create_image():
+    try:
+        image = Image.new('RGB', (64, 64), color=(50, 50, 50))
+        d = ImageDraw.Draw(image)
+        d.rectangle([16, 16, 48, 48], fill="red")
+        return image
+    except Exception as e:
+        print(f"Error creating tray icon: {e}")
+        return None
+
+def stop_monitoring(icon, item):
+    global running
+    running = False
+    icon.stop()
+    try:
+        root.destroy()
+    except Exception as e:
+        log_error(f"Error closing application: {e}")
+
+def show_window(icon, item):
+    try:
+        root.deiconify()
+        status_label.config(text="Your PC is Protected", fg="green")
+    except Exception as e:
+        log_error(f"Error showing window: {e}")
+
+def start_monitoring():
+    log_event("START", f"SentinelWatch Pro started on {OS_SYSTEM}", severity="Low")
+    threads = []
+    if config['monitor_logins']:
+        threads.append(threading.Thread(target=monitor_logins_windows if OS_SYSTEM == "Windows" else monitor_logins_linux if OS_SYSTEM == "Linux" else monitor_logins_macos, daemon=True))
+    if config['monitor_processes']:
+        threads.append(threading.Thread(target=monitor_processes, daemon=True))
+    if config['monitor_network']:
+        threads.append(threading.Thread(target=monitor_network, daemon=True))
+        threads.append(threading.Thread(target=monitor_network_traffic, daemon=True))
+    if config['monitor_files']:
+        threads.append(threading.Thread(target=monitor_files, daemon=True))
+    threads.append(threading.Thread(target=send_daily_report, daemon=True))
+    for thread in threads:
+        thread.start()
+
+if __name__ == "__main__":
+    try:
+        start_monitoring()
+        tray_thread = threading.Thread(target=lambda: Icon("SentinelWatch", create_image(), "SentinelWatch Pro", Menu(item('Show Window', show_window), item('Quit SentinelWatch', stop_monitoring))).run(), daemon=True)
+        tray_thread.start()
+        update_visualization()
+        filter_var.bind("<<ComboboxSelected>>", lambda event: filter_alerts())
+        root.mainloop()
+    except Exception as e:
+        log_event("ERROR", f"Startup error: {e}. Please run as administrator.", popup=True, severity="High")
+        try:
+            root.destroy()
+        except:
+            pass
