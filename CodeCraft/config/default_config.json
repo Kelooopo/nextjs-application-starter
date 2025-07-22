@@ -1,0 +1,378 @@
+{
+    "application": {
+        "name": "SentinelWatch Pro",
+        "version": "2.0.0",
+        "description": "Comprehensive cybersecurity monitoring application with real-time threat detection",
+        "web_interface": {
+            "host": "0.0.0.0",
+            "port": 5000,
+            "debug": false,
+            "secret_key": "sentinelwatch-pro-secure-key-2025"
+        }
+    },
+    "monitoring": {
+        "enabled": true,
+        "check_interval": 30,
+        "modules": {
+            "process_monitor": {
+                "enabled": true,
+                "cpu_threshold": 80.0,
+                "memory_threshold": 500.0,
+                "whitelist_processes": [
+                    "explorer.exe",
+                    "svchost.exe",
+                    "cmd.exe",
+                    "python.exe",
+                    "py.exe",
+                    "pythonw.exe",
+                    "conhost.exe",
+                    "dwm.exe",
+                    "winlogon.exe",
+                    "csrss.exe",
+                    "wininit.exe",
+                    "services.exe",
+                    "lsass.exe",
+                    "bash",
+                    "python3",
+                    "systemd",
+                    "init",
+                    "kthreadd",
+                    "ksoftirqd",
+                    "migration",
+                    "rcu_gp",
+                    "rcu_par_gp"
+                ],
+                "anomaly_detection": {
+                    "enabled": true,
+                    "cpu_spike_threshold": 2.0,
+                    "memory_spike_threshold": 2.0,
+                    "minimum_samples": 5
+                }
+            },
+            "network_monitor": {
+                "enabled": true,
+                "monitored_ports": [
+                    22,
+                    23,
+                    25,
+                    53,
+                    80,
+                    110,
+                    143,
+                    443,
+                    993,
+                    995,
+                    1433,
+                    3306,
+                    3389,
+                    5432,
+                    5900,
+                    6667,
+                    8080,
+                    8443
+                ],
+                "suspicious_ports": [
+                    1234,
+                    4444,
+                    5555,
+                    6666,
+                    31337,
+                    12345,
+                    54321
+                ],
+                "connection_flood_threshold": 50,
+                "connection_flood_window": 300,
+                "sniff_interface": "eth0",
+                "packet_analysis": {
+                    "enabled": false,
+                    "deep_inspection": false,
+                    "capture_size": 1500
+                }
+            },
+            "file_monitor": {
+                "enabled": false,
+                "monitored_directories": [
+                    "~/Documents",
+                    "~/Downloads",
+                    "~/Desktop",
+                    "/etc",
+                    "/bin",
+                    "/sbin",
+                    "/usr/bin",
+                    "/usr/sbin",
+                    "C:\\Windows\\System32",
+                    "C:\\Windows\\SysWOW64",
+                    "C:\\Program Files",
+                    "C:\\Program Files (x86)"
+                ],
+                "ignore_patterns": [
+                    "*.tmp",
+                    "*.log",
+                    "*.swp",
+                    "*.swo",
+                    "*~",
+                    ".DS_Store",
+                    "Thumbs.db",
+                    ".git/",
+                    "__pycache__/",
+                    "*.pyc",
+                    "*.pyo",
+                    "node_modules/",
+                    ".vscode/",
+                    ".idea/"
+                ],
+                "recursive_monitoring": true,
+                "calculate_hashes": true
+            },
+            "login_monitor": {
+                "enabled": true,
+                "track_failed_attempts": true,
+                "failed_attempt_threshold": 5,
+                "lockout_duration": 300,
+                "monitor_ssh": true,
+                "monitor_rdp": true,
+                "monitor_local": true
+            }
+        }
+    },
+    "threat_intelligence": {
+        "enabled": true,
+        "cache_timeout": 3600,
+        "services": {
+            "virustotal": {
+                "enabled": true,
+                "api_key": "",
+                "requests_per_minute": 4,
+                "public_api": true
+            },
+            "otx": {
+                "enabled": true,
+                "api_key": "",
+                "requests_per_minute": 60
+            },
+            "local_database": {
+                "enabled": true,
+                "update_interval": 86400,
+                "threat_feeds": [
+                    "malware_domains",
+                    "suspicious_ips",
+                    "known_bad_hashes"
+                ]
+            }
+        },
+        "scan_settings": {
+            "auto_scan_downloads": false,
+            "scan_network_traffic": false,
+            "quarantine_threats": false,
+            "notify_on_detection": true
+        }
+    },
+    "alerting": {
+        "enabled": true,
+        "alert_levels": {
+            "low": {
+                "notify": true,
+                "email": false,
+                "log": true,
+                "dashboard": true
+            },
+            "medium": {
+                "notify": true,
+                "email": true,
+                "log": true,
+                "dashboard": true
+            },
+            "high": {
+                "notify": true,
+                "email": true,
+                "log": true,
+                "dashboard": true,
+                "immediate": true
+            },
+            "critical": {
+                "notify": true,
+                "email": true,
+                "log": true,
+                "dashboard": true,
+                "immediate": true,
+                "sms": false
+            }
+        },
+        "throttling": {
+            "enabled": true,
+            "same_alert_interval": 30,
+            "max_alerts_per_minute": 10,
+            "escalation_threshold": 5
+        },
+        "email": {
+            "enabled": false,
+            "smtp_server": "smtp.gmail.com",
+            "smtp_port": 587,
+            "use_tls": true,
+            "sender_email": "",
+            "sender_password": "",
+            "recipient_emails": [],
+            "daily_report": {
+                "enabled": false,
+                "send_time": "08:00"
+            }
+        },
+        "webhook": {
+            "enabled": false,
+            "url": "",
+            "timeout": 10,
+            "retry_attempts": 3
+        }
+    },
+    "logging": {
+        "enabled": true,
+        "level": "INFO",
+        "directory": "logs",
+        "rotation": {
+            "max_size": "10MB",
+            "backup_count": 5,
+            "compress": true
+        },
+        "files": {
+            "main_log": "sentinelwatch.log",
+            "alert_log": "alerts.log",
+            "error_log": "errors.log",
+            "audit_log": "audit.log"
+        },
+        "formats": {
+            "console": "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+            "file": "%(asctime)s - %(name)s - %(levelname)s - %(filename)s:%(lineno)d - %(message)s"
+        },
+        "retention": {
+            "days": 30,
+            "auto_cleanup": true
+        }
+    },
+    "security": {
+        "encryption": {
+            "enabled": true,
+            "key_file": "encryption.key",
+            "algorithm": "Fernet",
+            "rotate_keys": false
+        },
+        "access_control": {
+            "enabled": false,
+            "authentication": false,
+            "session_timeout": 3600,
+            "max_login_attempts": 5
+        },
+        "data_protection": {
+            "anonymize_logs": false,
+            "encrypt_sensitive_data": true,
+            "secure_communication": true
+        }
+    },
+    "performance": {
+        "max_memory_usage": "512MB",
+        "max_cpu_usage": 25.0,
+        "monitoring_threads": 4,
+        "cache_size": "50MB",
+        "optimization": {
+            "lazy_loading": true,
+            "async_processing": true,
+            "batch_operations": true
+        }
+    },
+    "database": {
+        "type": "sqlite",
+        "file": "sentinelwatch.db",
+        "connection_pool": {
+            "min_connections": 1,
+            "max_connections": 10,
+            "timeout": 30
+        },
+        "maintenance": {
+            "auto_vacuum": true,
+            "optimize_interval": 86400
+        }
+    },
+    "integrations": {
+        "syslog": {
+            "enabled": false,
+            "server": "localhost",
+            "port": 514,
+            "facility": "local0"
+        },
+        "snmp": {
+            "enabled": false,
+            "community": "public",
+            "version": "2c"
+        },
+        "api": {
+            "enabled": true,
+            "rate_limiting": {
+                "enabled": true,
+                "requests_per_minute": 100
+            },
+            "authentication": {
+                "enabled": false,
+                "api_key_required": false
+            }
+        }
+    },
+    "system": {
+        "platform_specific": {
+            "windows": {
+                "event_log_monitoring": true,
+                "registry_monitoring": false,
+                "service_monitoring": true,
+                "wmi_queries": false
+            },
+            "linux": {
+                "systemd_monitoring": true,
+                "audit_log_monitoring": true,
+                "process_accounting": false,
+                "selinux_monitoring": false
+            },
+            "macos": {
+                "unified_log_monitoring": false,
+                "keychain_monitoring": false,
+                "xprotect_integration": false
+            }
+        },
+        "resource_limits": {
+            "max_open_files": 1024,
+            "max_network_connections": 500,
+            "max_monitored_processes": 1000
+        }
+    },
+    "ui": {
+        "web_interface": {
+            "theme": "dark",
+            "refresh_interval": 5000,
+            "auto_refresh": true,
+            "charts": {
+                "enabled": true,
+                "update_interval": 10000,
+                "history_points": 100
+            }
+        },
+        "notifications": {
+            "browser_notifications": true,
+            "sound_alerts": false,
+            "popup_duration": 5000
+        }
+    },
+    "compliance": {
+        "data_retention": {
+            "logs": 90,
+            "alerts": 365,
+            "reports": 730
+        },
+        "audit": {
+            "enabled": true,
+            "track_configuration_changes": true,
+            "track_user_actions": true
+        },
+        "privacy": {
+            "anonymize_personal_data": false,
+            "gdpr_compliance": false,
+            "data_minimization": true
+        }
+    }
+}
